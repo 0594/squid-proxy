@@ -16,6 +16,20 @@
   - 适用于生产环境的稳定配置
 
 ---
+## ⚡ 执行一键部署 
+```bash
+curl -L https://raw.githubusercontent.com/0594/squid-proxy/main/proxy-installer.sh -o proxy-installer.sh && chmod +x proxy-installer.sh && sudo ./proxy-installer.sh
+```
+
+## ✅ 验证部署
+```
+# 无需任何操作，部署完成后自动输出
+✅ 部署完成! 代理服务已启动
+访问地址: https://proxy.yourdomain.com:443
+用户名: proxy
+密码: your_strong_password
+```
+---
 
 ## 🔧 快速部署指南
 
