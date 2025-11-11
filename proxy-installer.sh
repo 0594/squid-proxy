@@ -43,7 +43,7 @@ USERNAME=${USERNAME:-proxy}
 
 read -s -p "密码 (12位以上，含大小写字母+数字+符号): " PASSWORD
 echo
-while [ -z "$PASSWORD" ]; then
+while [ -z "$PASSWORD" ]; do
     read -s -p "密码 (12位以上，含大小写字母+数字+符号): " PASSWORD
     echo
 done
@@ -58,7 +58,7 @@ fi
 echo -e "\n\033[1;32m更新系统并安装依赖...\033[0m"
 apt update -y
 apt upgrade -y
-apt install -y squid certbot python3-certbot-dns-cloudflare curl
+apt install -y squid certbot python3-certbot-dns-cloudflare curl apache2-utils
 
 # 申请Let's Encrypt证书
 echo -e "\n\033[1;32m申请Let's Encrypt证书 (使用Cloudflare API Token)...\033[0m"
@@ -116,7 +116,7 @@ fi
 
 # 创建认证文件
 echo -e "\n\033[1;32m设置代理认证信息...\033[0m"
-echo -n "$PASSWORD" | /bin/htpasswd -i -b /etc/squid/passwd "$USERNAME"
+echo -n "$PASSWORD" | /usr/sbin/htpasswd -i -b /etc/squid/passwd "$USERNAME"
 
 # 重启Squid服务
 systemctl restart squid
@@ -182,7 +182,7 @@ while true; do
             read -p "输入新用户名: " NEW_USER
             read -s -p "输入新密码: " NEW_PASS
             echo
-            echo -n "\${NEW_PASS}" | /bin/htpasswd -i -b /etc/squid/passwd "\${NEW_USER}"
+            echo -n "\${NEW_PASS}" | /usr/sbin/htpasswd -i -b /etc/squid/passwd "\${NEW_USER}"
             systemctl restart squid
             echo -e "\033[1;32m认证信息已更新!\033[0m"
             ;;
@@ -192,7 +192,7 @@ while true; do
             ;;
         8)
             echo -e "\n\033[1;33m代理配置信息:\033[0m"
-            echo "代理地址: https://$(grep -m1 DOMAIN /root/proxy-installer.sh | cut -d '=' -f2):${PORT}"
+            echo "代理地址: https://$DOMAIN:$PORT"
             echo "用户名: $USERNAME"
             echo "密码: 已设置 (不显示)"
             ;;
