@@ -33,3 +33,21 @@ chmod +x proxy-installer.sh
 
 # 运行安装 (需要root权限)
 sudo ./proxy-installer.sh
+
+### 3.部署过程
+```bash
+=== 请按提示输入以下信息（所有输入将隐藏显示） ===
+1. 域名 (e.g. proxy.example.com): proxy.yourdomain.com
+2. Cloudflare API Token (需Zone:Edit权限): YOUR_CLOUDFLARE_TOKEN
+3. 代理端口 (默认443): 443
+4. Let's Encrypt邮箱: admin@yourdomain.com
+5. 代理用户名 (默认proxy): proxy
+6. 代理密码: your_strong_password
+
+✅ 部署完成! 代理服务已启动
+访问地址: https://proxy.yourdomain.com:443
+用户名: proxy
+密码: your_strong_password
+
+使用命令 'proxy' 管理代理服务
+
