@@ -12,17 +12,6 @@ if ! grep -q "Debian GNU/Linux 12" /etc/os-release; then
     exit 1
 fi
 
-# 自动安装coreutils（包含chmod）
-echo "Installing coreutils to provide chmod..."
-apt update -y
-apt install -y coreutils
-
-# 确保chmod可用
-if ! command -v /bin/chmod &> /dev/null; then
-    echo "Error: Failed to install coreutils" >&2
-    exit 1
-fi
-
 # 交互式获取配置
 echo -e "\n\033[1;33m请输入代理配置信息:\033[0m"
 read -p "域名 (例如: proxy.yourdomain.com): " DOMAIN
@@ -54,7 +43,7 @@ if ss -tuln | grep -q ":${PORT} "; then
     exit 1
 fi
 
-# 安装依赖
+# 安装依赖（已移除coreutils，仅安装必要包）
 echo -e "\n\033[1;32m更新系统并安装依赖...\033[0m"
 apt update -y
 apt upgrade -y
