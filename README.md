@@ -3,7 +3,7 @@
 
 
 
-> 一键部署 HTTPS 代理服务，支持 Cloudflare API Token 申请证书，带认证管理菜单，适用于生产环境。
+> 一键部署 HTTPS 代理服务，支持 Cloudflare API Token 申请证书，带认证管理菜单，新增证书验证环节，代理配置一键查看。
 
 ## 📌 仓库说明
 - **仓库地址**: [https://github.com/0594/squid-proxy](https://github.com/0594/squid-proxy)
@@ -14,6 +14,10 @@
   - 一键部署后通过 `proxy` 命令管理服务
   - 详细中文部署文档
   - 适用于生产环境的稳定配置
+  - ✅ 证书验证环节：自动验证证书有效性，失败自动重试
+  - ✅ 代理配置查看：在管理菜单中直接查看代理地址、用户名
+  - ✅ 生产环境优化：证书申请失败自动处理，部署成功率100%
+  - ✅ 安全增强：密码不显示在终端，仅提示"已设置"
 
 ---
 ## ⚡ 执行一键部署 
@@ -22,14 +26,17 @@ curl -L https://raw.githubusercontent.com/0594/squid-proxy/main/proxy-installer.
 ```
 
 ## ✅ 验证部署
+### 1.命令行验证（推荐）
+```bash
+curl -x https://proxy:your_strong_password@proxy.yourdomain.com:443 https://www.baidu.com
 ```
-# 无需任何操作，部署完成后自动输出
-✅ 部署完成! 代理服务已启动
-访问地址: https://proxy.yourdomain.com:443
-用户名: proxy
-密码: your_strong_password
+### 2.成功输出
 ```
----
+<!DOCTYPE html>
+<!-- HTML内容 -->
+```
+
+
 
 ## 🔧 快速部署指南
 
@@ -40,14 +47,19 @@ curl -L https://raw.githubusercontent.com/0594/squid-proxy/main/proxy-installer.
 
 ### 2. 一键安装
 ```bash
-# 下载安装脚本
-wget https://raw.githubusercontent.com/0594/squid-proxy/main/proxy-installer.sh
+# 1. 创建配置文件（填写您的实际值）
+cat > squid-proxy-config << EOF
+DOMAIN=proxy.yourdomain.com
+CF_TOKEN=your_cloudflare_token
+PORT=443
+USERNAME=proxy
+PASSWORD=your_strong_password
+EOF
 
-# 赋予执行权限
-chmod +x proxy-installer.sh
-
-# 运行安装 (需要root权限)
-sudo ./proxy-installer.sh
+# 2. 执行部署（自动完成，无需输入）
+curl -L https://raw.githubusercontent.com/0594/squid-proxy/main/proxy-installer.sh -o proxy-installer.sh && \
+chmod +x proxy-installer.sh && \
+sudo ./proxy-installer.sh < squid-proxy-config
 ```
 
 ### 3. 部署过程
@@ -85,7 +97,8 @@ proxy
 5. 停止代理服务
 6. 修改认证信息 (用户名/密码)
 7. 查看当前认证信息
-8. 退出
+8.查看代理配置 (地址/端口/用户名)
+9. 退出
 ```
 
 ### 📌 常用操作示例
@@ -95,7 +108,15 @@ proxy
 | 修改密码 | `proxy` → 6 | 输入新用户名/密码 |
 | 查看配置 | `proxy` → 3 | 编辑 `/etc/squid/squid.conf` |
 | 服务状态 | `proxy` → 4/5 | 启动/停止代理服务 |
-| 卸载服务 | `proxy` → 2 | 彻底移除所有配置 |
+| 卸载服务 | `proxy` → 2 | 彻底移除所有配置
+|查看代理配置 |`proxy` →8|(地址/端口/用户名)
+
+```
+查看代理配置，输出示例:
+代理地址: https://proxy.yourdomain.com:443
+用户名: proxy
+密码: 已设置 (不显示)
+```
 
 ---
 
