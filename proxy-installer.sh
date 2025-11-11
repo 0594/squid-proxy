@@ -12,7 +12,7 @@ if ! grep -q "Debian GNU/Linux 12" /etc/os-release; then
     exit 1
 fi
 
-# 确保 coreutils 已安装（包含 chmod）
+# 自动安装 coreutils（包含 chmod）
 if ! command -v /bin/chmod &> /dev/null; then
     echo "Installing coreutils to provide chmod..."
     apt update -y
