@@ -1,210 +1,215 @@
 #!/bin/bash
+# Squid HTTPS Proxy Installer with Cloudflare ACME & Auth Management
+# Usage: sudo bash install_squid_proxy.sh
 
-# 确保在root下运行
+# Check root privileges
 if [ "$(id -u)" != "0" ]; then
-    echo "Error: This script must be run as root" >&2
+    echo "This script must be run as root. Use: sudo bash $0"
     exit 1
 fi
 
-# 检查系统是否为Debian 12
-if ! grep -q "Debian GNU/Linux 12" /etc/os-release; then
-    echo "Error: This script only supports Debian 12" >&2
-    exit 1
-fi
-
-# 交互式获取配置
-echo -e "\n\033[1;33m请输入代理配置信息:\033[0m"
-read -p "域名 (例如: proxy.yourdomain.com): " DOMAIN
-while [ -z "$DOMAIN" ]; do
-    read -p "域名 (例如: proxy.yourdomain.com): " DOMAIN
-done
-
-read -p "Cloudflare API Token (需Zone:Edit权限): " CF_TOKEN
-while [ -z "$CF_TOKEN" ]; do
-    read -p "Cloudflare API Token (需Zone:Edit权限): " CF_TOKEN
-done
-
-read -p "代理端口 (默认443): " PORT
-PORT=${PORT:-443}
-
-read -p "用户名 (默认proxy): " USERNAME
-USERNAME=${USERNAME:-proxy}
-
-read -s -p "密码 (12位以上，含大小写字母+数字+符号): " PASSWORD
-echo
-while [ -z "$PASSWORD" ]; do
-    read -s -p "密码 (12位以上，含大小写字母+数字+符号): " PASSWORD
-    echo
-done
-
-# 检查端口占用
-if ss -tuln | grep -q ":${PORT} "; then
-    echo -e "\n\033[1;31mError: 端口 ${PORT} 已被占用，请选择其他端口\033[0m"
-    exit 1
-fi
-
-# 安装依赖（已移除coreutils，仅安装必要包）
-echo -e "\n\033[1;32m更新系统并安装依赖...\033[0m"
+# Install required dependencies
+echo "Updating package list and installing dependencies..."
 apt update -y
-apt upgrade -y
-apt install -y squid certbot python3-certbot-dns-cloudflare curl apache2-utils
+apt install -y squid certbot certbot-dns-cloudflare curl jq
 
-# 申请Let's Encrypt证书
-echo -e "\n\033[1;32m申请Let's Encrypt证书 (使用Cloudflare API Token)...\033[0m"
-export CF_API_TOKEN="$CF_TOKEN"
-certbot certonly --dns-cloudflare --dns-cloudflare-credentials /dev/null -d "$DOMAIN" \
-  --non-interactive --agree-tos --email "admin@$DOMAIN" --dns-cloudflare-propagation-seconds 30
+# Interactive configuration
+echo "===== Squid HTTPS Proxy Installation ====="
+echo "Please provide the following information:"
 
-# 验证证书有效性（自动重试3次）
-echo -e "\n\033[1;33m正在验证证书有效性...\033[0m"
-CERT_VALID=0
-RETRY_COUNT=0
-MAX_RETRIES=3
-
-while [ $CERT_VALID -eq 0 ] && [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-  # 使用curl验证证书
-  CERT_STATUS=$(curl -I -k https://$DOMAIN:$PORT --max-time 10 2>&1 | grep "HTTP/")
-  
-  if [ -z "$CERT_STATUS" ]; then
-    RETRY_COUNT=$((RETRY_COUNT + 1))
-    echo -e "\033[1;31m证书验证失败 (第 $RETRY_COUNT/$MAX_RETRIES 次尝试)...\033[0m"
-    echo "正在重新申请证书..."
-    
-    # 重新申请证书
-    certbot renew --force-renewal
-    
-    # 重新配置Squid
-    cat > /etc/squid/squid.conf << EOF
-https_port ${PORT} cert=/etc/letsencrypt/live/${DOMAIN}/fullchain.pem key=/etc/letsencrypt/live/${DOMAIN}/privkey.pem
-auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/passwd
-auth_param basic realm Squid Proxy Server
-acl authenticated proxy_auth REQUIRED
-http_access allow authenticated
-http_access allow all
-EOF
-    
-    # 重启Squid
-    systemctl restart squid
-  else
-    CERT_VALID=1
-    echo -e "\033[1;32m✅ 证书验证成功! 证书有效\033[0m"
-  fi
+# Domain input
+read -p "1. Enter your domain (e.g. proxy.example.com): " DOMAIN
+while [ -z "$DOMAIN" ]; do
+    read -p "Domain cannot be empty. Enter your domain: " DOMAIN
 done
 
-# 如果重试后仍失败
-if [ $CERT_VALID -eq 0 ]; then
-  echo -e "\033[1;31m❌ 证书验证失败 (重试 $MAX_RETRIES 次后仍失败)\033[0m"
-  echo -e "请检查以下内容:"
-  echo "  1. Cloudflare API Token 是否有 Zone:Edit 权限"
-  echo "  2. 域名是否正确解析到服务器IP"
-  echo "  3. 防火墙是否开放端口 $PORT"
-  echo "  4. Let's Encrypt 邮箱是否有效"
-  echo -e "\n\033[1;33m建议: 运行 'proxy' 命令重新安装代理服务\033[0m"
-  exit 1
+# Cloudflare API Token
+echo -e "\n2. Cloudflare API Token (must have Zone:Edit permission)"
+echo "   - Get it from: https://dash.cloudflare.com/profile/api-tokens"
+read -s -p "   API Token: " CLOUDFLARE_TOKEN
+echo -e "\n"
+
+# Email for Let's Encrypt
+read -p "3. Enter your email for Let's Encrypt (used for certificate notifications): " EMAIL
+while [ -z "$EMAIL" ]; do
+    read -p "Email cannot be empty. Enter your email: " EMAIL
+done
+
+# Proxy credentials
+echo -e "\n4. Set up proxy authentication"
+read -p "   Username: " USERNAME
+while [ -z "$USERNAME" ]; do
+    read -p "Username cannot be empty. Enter username: " USERNAME
+done
+
+read -s -p "   Password (will not be shown): " PASSWORD
+echo -e "\n"
+read -s -p "   Confirm Password: " CONFIRM_PASSWORD
+echo -e "\n"
+
+if [ "$PASSWORD" != "$CONFIRM_PASSWORD" ]; then
+    echo "Error: Passwords do not match. Exiting."
+    exit 1
 fi
 
-# 创建认证文件
-echo -e "\n\033[1;32m设置代理认证信息...\033[0m"
-echo -n "$PASSWORD" | /usr/sbin/htpasswd -i -b /etc/squid/passwd "$USERNAME"
+# Get Cloudflare Zone ID
+echo -e "\nFetching Cloudflare Zone ID for $DOMAIN..."
+ZONE_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$DOMAIN" \
+    -H "Authorization: Bearer $CLOUDFLARE_TOKEN" \
+    -H "Content-Type: application/json" | jq -r '.result[0].id')
 
-# 重启Squid服务
+if [ -z "$ZONE_ID" ] || [ "$ZONE_ID" = "null" ]; then
+    echo "Error: Zone ID not found for $DOMAIN. Check your domain and API token permissions."
+    echo "Make sure your API token has Zone:Edit permission and the domain exists in Cloudflare."
+    exit 1
+fi
+
+# Generate Cloudflare credentials file
+echo "dns_cloudflare_api_token = $CLOUDFLARE_TOKEN" > /etc/cloudflare/credentials.ini
+mkdir -p /etc/cloudflare
+chmod 600 /etc/cloudflare/credentials.ini
+
+# Request Let's Encrypt certificate
+echo -e "\nRequesting SSL certificate from Let's Encrypt..."
+CERT_RETRY=0
+while [ $CERT_RETRY -lt 3 ]; do
+    if certbot certonly --dns-cloudflare --dns-cloudflare-credentials /etc/cloudflare/credentials.ini \
+        --dns-cloudflare-propagation-seconds 30 \
+        -d "$DOMAIN" \
+        --email "$EMAIL" \
+        --agree-tos \
+        --non-interactive \
+        --quiet; then
+        break
+    else
+        CERT_RETRY=$((CERT_RETRY + 1))
+        echo "Certificate request failed. Retrying ($CERT_RETRY/3)..."
+        sleep 2
+    fi
+done
+
+if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    echo "Error: Certificate request failed after 3 attempts. Exiting."
+    exit 1
+fi
+
+# Configure Squid
+echo -e "\nConfiguring Squid proxy..."
+SQUID_CONF="/etc/squid/squid.conf"
+cp "$SQUID_CONF" "${SQUID_CONF}.bak"
+
+# Backup original config
+echo "Backup created at $SQUID_CONF.bak"
+
+# Replace configuration with our settings
+cat > "$SQUID_CONF" << EOF
+# Squid HTTPS Proxy Configuration (Generated by install_squid_proxy.sh)
+acl SSL_ports port 443
+acl Safe_ports port 80,443
+acl CONNECT method CONNECT
+
+http_port 443 ssl-bump cert=/etc/letsencrypt/live/$DOMAIN/fullchain.pem key=/etc/letsencrypt/live/$DOMAIN/privkey.pem
+https_port 443 ssl-bump cert=/etc/letsencrypt/live/$DOMAIN/fullchain.pem key=/etc/letsencrypt/live/$DOMAIN/privkey.pem
+
+# Proxy authentication
+auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/passwd
+auth_param basic children 5
+auth_param basic realm Squid Proxy
+auth_param basic credentialsttl 2 hours
+acl authenticated_users proxy_auth REQUIRED
+http_access allow authenticated_users
+http_access deny all
+
+# Allow all traffic
+http_access allow all
+cache_mgr admin@$DOMAIN
+cache_effective_user squid
+cache_effective_group squid
+EOF
+
+# Create proxy password file
+echo -e "\nSetting up proxy authentication..."
+echo "$USERNAME:$PASSWORD" > /etc/squid/passwd
+chmod 640 /etc/squid/passwd
+chown root:squid /etc/squid/passwd
+
+# Enable SSL bumping
+echo "ssl_bump server-first all" >> "$SQUID_CONF"
+
+# Restart Squid
 systemctl restart squid
 systemctl enable squid
 
-# 创建管理命令
-echo -e "\n\033[1;32m创建管理命令 'proxy'...\033[0m"
+# Create management command
+echo -e "\nCreating management command 'proxy'..."
 cat > /usr/local/bin/proxy << EOF
 #!/bin/bash
+# Proxy Management Command
 
-# 检查root权限
-if [ "\$(id -u)" != "0" ]; then
-    echo "Error: This command must be run as root" >&2
-    exit 1
-fi
-
-# 管理菜单
-while true; do
-    clear
-    echo -e "\033[1;34m===== Squid Proxy 管理系统 =====\033[0m"
-    echo "1. 重新安装 (覆盖现有配置)"
-    echo "2. 卸载代理服务"
-    echo "3. 修改配置 (编辑squid.conf)"
-    echo "4. 启动代理服务"
-    echo "5. 停止代理服务"
-    echo "6. 修改认证信息 (用户名/密码)"
-    echo "7. 查看当前认证信息"
-    echo "8. 查看代理配置 (地址/端口/用户名)"
-    echo "9. 退出"
-    
-    read -p "请选择操作: " choice
-    
-    case \$choice in
-        1)
-            echo -e "\n\033[1;33m正在重新安装... (会覆盖现有配置)\033[0m"
-            bash /root/proxy-installer.sh
-            exit
-            ;;
-        2)
-            echo -e "\n\033[1;31m卸载代理服务 (将删除所有配置)...\033[0m"
-            systemctl stop squid
-            rm -f /etc/squid/squid.conf
-            rm -f /etc/squid/passwd
-            rm -f /etc/squid/squid.conf.bak
-            apt remove -y squid certbot
-            rm -f /usr/local/bin/proxy
-            echo -e "\033[1;32m卸载完成! 服务已停止并移除所有配置\033[0m"
-            ;;
-        3)
-            echo -e "\n\033[1;33m正在打开配置文件: /etc/squid/squid.conf\033[0m"
-            nano /etc/squid/squid.conf
-            systemctl restart squid
-            ;;
-        4)
-            systemctl start squid
-            echo -e "\033[1;32m代理服务已启动\033[0m"
-            ;;
-        5)
-            systemctl stop squid
-            echo -e "\033[1;32m代理服务已停止\033[0m"
-            ;;
-        6)
-            read -p "输入新用户名: " NEW_USER
-            read -s -p "输入新密码: " NEW_PASS
-            echo
-            echo -n "\${NEW_PASS}" | /usr/sbin/htpasswd -i -b /etc/squid/passwd "\${NEW_USER}"
-            systemctl restart squid
-            echo -e "\033[1;32m认证信息已更新!\033[0m"
-            ;;
-        7)
-            echo -e "\n\033[1;33m当前认证信息:\033[0m"
-            cat /etc/squid/passwd
-            ;;
-        8)
-            echo -e "\n\033[1;33m代理配置信息:\033[0m"
-            echo "代理地址: https://$DOMAIN:$PORT"
-            echo "用户名: $USERNAME"
-            echo "密码: 已设置 (不显示)"
-            ;;
-        9)
-            echo -e "\033[1;32m退出管理菜单\033[0m"
-            exit
-            ;;
-        *)
-            echo -e "\033[1;31m无效选项，请重新输入\033[0m"
-            ;;
-    esac
-    sleep 1
-done
+case "\$1" in
+    install)
+        echo "Squid proxy is already installed. Use 'proxy config' to reconfigure."
+        ;;
+    uninstall)
+        echo "Uninstalling Squid proxy..."
+        systemctl stop squid
+        systemctl disable squid
+        rm -f /etc/squid/squid.conf /etc/squid/passwd /etc/cloudflare/credentials.ini
+        apt remove -y squid certbot certbot-dns-cloudflare
+        rm -f /usr/local/bin/proxy
+        echo "Squid proxy uninstalled successfully."
+        ;;
+    config)
+        echo "Reconfiguring Squid proxy..."
+        /etc/squid/squid.conf.bak > /etc/squid/squid.conf
+        /usr/local/bin/proxy change-pass
+        systemctl restart squid
+        echo "Configuration updated. Proxy restarted."
+        ;;
+    change-pass)
+        read -p "Enter new username: " NEW_USER
+        read -s -p "Enter new password: " NEW_PASS
+        echo -e "\n"
+        read -s -p "Confirm new password: " CONFIRM_PASS
+        echo -e "\n"
+        if [ "$NEW_PASS" != "$CONFIRM_PASS" ]; then
+            echo "Error: Passwords do not match."
+            exit 1
+        fi
+        echo "\$NEW_USER:\$NEW_PASS" > /etc/squid/passwd
+        chmod 640 /etc/squid/passwd
+        chown root:squid /etc/squid/passwd
+        systemctl restart squid
+        echo "Password changed successfully."
+        ;;
+    restart)
+        systemctl restart squid
+        echo "Squid restarted."
+        ;;
+    *)
+        echo "Usage: proxy [install|uninstall|config|change-pass|restart]"
+        echo "  install: Install Squid (already installed)"
+        echo "  uninstall: Remove Squid and all configurations"
+        echo "  config: Reconfigure proxy settings"
+        echo "  change-pass: Change proxy authentication password"
+        echo "  restart: Restart Squid service"
+        ;;
+esac
 EOF
+
 chmod +x /usr/local/bin/proxy
+echo "Management command 'proxy' created at /usr/local/bin/proxy"
 
-# 清理
-rm -f /root/proxy-installer.sh
+# Final setup message
+echo -e "\n===== Installation Complete ====="
+echo "Squid HTTPS Proxy is now running on port 443."
+echo "Proxy URL: https://$DOMAIN"
+echo "Authentication: $USERNAME / $PASSWORD (will be changed immediately)"
 
-# 完成信息
-echo -e "\n\033[1;32m✅ 部署完成! 代理服务已启动\033[0m"
-echo -e "代理地址: \033[1;34mhttps://$DOMAIN:$PORT\033[0m"
-echo -e "用户名: \033[1;34m$USERNAME\033[0m"
-echo -e "密码: \033[1;34m已设置 (不显示)\033[0m"
-echo -e "\n\033[1;33m使用命令 'proxy' 管理代理服务\033[0m"
-echo -e "\033[1;33m请立即通过 'proxy' → 选项6 修改默认密码\033[0m"
+# Force password change prompt
+echo -e "\n\033[1;31mIMPORTANT: You MUST change the default password immediately!\033[0m"
+echo "Run: proxy change-pass"
+echo "Do NOT close this terminal until you change the password."
+
+# Keep terminal open for password change
+read -p "Press Enter to exit (after changing password with 'proxy change-pass')..." dummy
