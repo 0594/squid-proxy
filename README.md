@@ -22,7 +22,9 @@
 ---
 ## ⚡ 执行一键部署 
 ```bash
-curl -L https://raw.githubusercontent.com/0594/squid-proxy/main/proxy-installer.sh -o proxy-installer.sh && chmod +x proxy-installer.sh && sudo ./proxy-installer.sh
+curl -L https://raw.githubusercontent.com/0594/squid-proxy/main/proxy-installer.sh -o proxy-installer.sh && \
+chmod +x proxy-installer.sh && \
+sudo ./proxy-installer.sh < squid-proxy-config
 ```
 
 ## ✅ 验证部署
