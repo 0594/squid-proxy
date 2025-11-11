@@ -1,6 +1,6 @@
 # Squid HTTPS 代理与 Let's Encrypt 无缝集成 (Debian 12)
 
-![Squid Proxy](https://i.imgur.com/7XcLJ7l.png)
+![Squid Proxy]([https://i.imgur.com/7XcLJ7l.png](https://avatars.githubusercontent.com/u/363029?s=200&v=4))
 
 > 一键部署 HTTPS 代理服务，支持 Cloudflare API Token 申请证书，带认证管理菜单，适用于生产环境。
 
